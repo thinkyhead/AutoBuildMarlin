@@ -355,6 +355,17 @@ span.progress {
   background: #FFF3;
   }
 
+#bed-canvas {
+  background: #99C;
+  border: 1px solid black;
+  width: 300px;
+  height: 300px;
+  }
+
+.geom-form label {
+  display: block;
+  }
+
 .panel-error {
   text-align: center;
   color: red;

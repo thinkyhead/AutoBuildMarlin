@@ -599,7 +599,8 @@ function webViewContent() {
   panes.geometry = load_pane('geom');
 
   // Load LCD pane
-  panes.lcd = load_pane('lcd');
+  const opt = '<option value="1">Test 123</option>';
+  panes.lcd = load_pane('lcd', { lcd_options: opt, check_label: "Check me!" });
 
   // Load SD pane
   panes.sd = load_pane('sd');
