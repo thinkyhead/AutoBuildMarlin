@@ -76,6 +76,12 @@ var ABM = (function(){
           case 'warning':
             $err.addClass('warning').html(m.warning).show('fast');
             break;
+
+          case 'tree':
+            //console.log("Got tree data", m.data);
+            $('#debug-tree').jsonbrowser(m.data);
+            break;
+
           case 'envs':
             // We finally got environments!
             // Make some buttons...

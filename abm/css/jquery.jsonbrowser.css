@@ -1,0 +1,41 @@
+.jsonbrowser ul {
+    margin          : 0;
+    padding         : 0;
+    list-style-type : none;
+}
+
+.jsonbrowser ul ul {
+    padding-left : 20px;
+}
+
+.jsonbrowser li {
+    margin  : 0;
+    padding : 2px 0;
+}
+
+.jsonbrowser li.collapsible > .key {
+    cursor          : pointer;
+    text-decoration : underline;
+}
+
+.jsonbrowser ul.collapsed {
+    display : none;
+}
+
+.jsonbrowser .key {
+    font-size   : 15px;
+    font-weight : bold;
+}
+
+.jsonbrowser .value {
+    font-family : "Bitstream Vera Sans Mono", "DejaVu Sans Mono", Monaco, Consolas, monospace;
+    font-size   : 12px;
+}
+
+.jsonbrowser .empty-value {
+    font-style : italic;
+}
+
+.jsonbrowser a {
+    color : #111;
+}
