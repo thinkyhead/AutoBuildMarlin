@@ -595,6 +595,9 @@ function webViewContent() {
 
   var panes = {};
 
+  // Load Summary pane
+  panes.summary = load_pane('summ');
+
   // Load Geometry pane
   panes.geometry = load_pane('geom');
 
