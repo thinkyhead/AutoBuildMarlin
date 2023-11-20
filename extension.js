@@ -11,6 +11,7 @@ const vscode = require('vscode'),
        prefs = require('./abm/prefs'),
       format = require('./abm/format'),
         docs = require('./abm/docs'),
+    importer = require('./abm/importer'),
       editor = require('./abm/editor');
 
 exports.activate = (context) => {
@@ -29,6 +30,8 @@ exports.activate = (context) => {
     vc.registerCommand('abm.edit.adv',    () => { abm.edit_config('adv');       }),
     vc.registerCommand('abm.sponsor',     () => { abm.sponsor();                }),
     vc.registerCommand('abm.codeformat',  () => { format.codeformat();          }),
+    vc.registerCommand('abm.import',      () => { importer.do_import();         }),
+    vc.registerCommand('abm.migrate',     () => { importer.do_migrate();        }),
     vc.registerCommand('abm.export.json', () => { abm.run_schema_py('json');    }),
     vc.registerCommand('abm.export.yml',  () => { abm.run_schema_py('yml');     }),
     vc.registerCommand('abm.apply.ini',   () => { abm.run_configuration_py();   }),

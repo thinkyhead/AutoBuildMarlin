@@ -1,0 +1,448 @@
+/**
+ * Auto Build Marlin
+ * abm/importer.js - Import and migrate Marlin configs from older versions.
+ *
+ * These methods read a set of config files from an older Marlin
+ * version and convert them to the current version. The old configs may already
+ * be in the Marlin folder in which case they are "migrated." For "import" we
+ * first present a file picker to select the location of the old configs.
+ *
+ * Strategy:
+ * - Read the user's config files and the appropriate embedded Conditionals_LCD.h
+ *   file into a ConfigSchema to extract all enabled/disabled options.
+ * - Export the schema to a flat config data format.
+ * - Run all migration transforms in succession (version-by-version chain).
+ * - Write the migrated config data as config.ini, then optionally apply it.
+ * - Back up the old configs first.
+ */
+
+'use strict';
+
+const marlin = require('./js/marlin'),
+       prefs = require('./prefs'),
+    migRules = require('./migration-rules'),
+        path = require('path'),
+          fs = require('fs'),
+          os = require('os');
+
+const vscode = require('vscode'),
+          vc = vscode.commands,
+          ws = vscode.workspace,
+          vw = vscode.window;
+
+// Load schema module for parsing configs
+const { ConfigSchema } = require('./js/schema');
+
+// ============================================================
+// Internal helpers
+// ============================================================
+
+/**
+ * Read a file as UTF-8 text, returning empty string if missing.
+ */
+function safeRead(filePath) {
+  try {
+    return fs.readFileSync(filePath, 'utf8');
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * Resolve the path to an embedded config file.
+ * Embedded configs live in configs/<version>/ inside the extension.
+ */
+function embeddedConfigPath(version, filename) {
+  return path.join(__dirname, '..', 'configs', version, filename);
+}
+
+// ============================================================
+// Config parsing → flat data
+// ============================================================
+
+/**
+ * Parse config text into a ConfigSchema and extract flat data.
+ *
+ * @param {string} configText      Raw Configuration.h text
+ * @param {string} configAdvText   Raw Configuration_adv.h text
+ * @param {string} condText        Raw Conditionals_LCD.h text for this version (or '')
+ * @returns {object} Flat config data: { 'OPTION_NAME': { value, enabled }, ... }
+ */
+function parseConfigsToFlatData(configText, configAdvText, condText) {
+  const data = {};
+
+  // Parse main config
+  const schema = new ConfigSchema(configText);
+  for (const item of schema.iterateDataBySID()) {
+    if (item.name && !['CONFIGURATION_H_VERSION', 'CONFIGURATION_ADV_H_VERSION', 'CONFIG_EXAMPLES_DIR', 'LCD_HEIGHT'].includes(item.name)) {
+      data[item.name] = { value: String(item.value ?? ''), enabled: !!item.evaled };
+    }
+  }
+
+  // Parse second config (adv) — need offset so SIDs don't collide
+  // Use the last SID from the first config as offset
+  const sidOffset = schema.bysid.length;
+  const advSchema = new ConfigSchema(configAdvText, sidOffset);
+  for (const item of advSchema.iterateDataBySID()) {
+    if (item.name && !['CONFIGURATION_H_VERSION', 'CONFIGURATION_ADV_H_VERSION', 'CONFIG_EXAMPLES_DIR', 'LCD_HEIGHT'].includes(item.name)) {
+      // Don't overwrite if already set from basic config
+      if (!(item.name in data))
+        data[item.name] = { value: String(item.value ?? ''), enabled: !!item.evaled };
+    }
+  }
+
+  return data;
+}
+
+/**
+ * Parse config files from the current workspace into flat data.
+ * Optionally loads the embedded Conditionals_LCD.h for the given version.
+ *
+ * @param {string} srcVersion  Version string like "2.0.5" or hex like "02000500"
+ * @returns {object} Flat config data
+ */
+function loadWorkspaceConfigs(srcVersion) {
+  const wr = marlin.workspaceRoot;
+  if (!wr) return {};
+
+  const configText   = safeRead(path.join(wr, 'Marlin', 'Configuration.h'));
+  const configAdvText = safeRead(path.join(wr, 'Marlin', 'Configuration_adv.h'));
+
+  // Try to load Conditionals_LCD.h for the source version
+  let condText = '';
+  const verDir = migRules.nearestConfigVersion(srcVersion);
+  if (verDir) {
+    condText = safeRead(embeddedConfigPath(verDir, 'Conditionals_LCD.h'));
+  }
+
+  return parseConfigsToFlatData(configText, configAdvText, condText);
+}
+
+// ============================================================
+// config.ini export
+// ============================================================
+
+/**
+ * Convert flat config data to config.ini format string.
+ * Enabled options:      OPTION_NAME = value
+ * Disabled options:     ; OPTION_NAME = value
+ * Comments and sections are added for readability.
+ *
+ * @param {object} data     Flat config data
+ * @returns {string}        config.ini content
+ */
+function flatDataToConfigIni(data) {
+  let ini = ';\n';
+  ini += '; Auto-migrated Marlin configuration\n';
+  ini += '; Generated by Auto Build Marlin Config Updater\n';
+  ini += `; ${new Date().toISOString().slice(0, 10)}\n`;
+  ini += ';\n\n';
+
+  // Collect enabled and disabled options separately
+  const enabled = [], disabled = [];
+  for (const [name, item] of Object.entries(data)) {
+    (item.enabled ? enabled : disabled).push(name);
+  }
+  enabled.sort();
+
+  // Write enabled options
+  for (const name of enabled) {
+    const v = data[name].value;
+    ini += `${name} = ${v}\n`;
+  }
+
+  if (disabled.length) {
+    ini += '\n; --- Disabled options ---\n;\n';
+    disabled.sort();
+    for (const name of disabled) {
+      const v = data[name].value;
+      ini += `; ${name} = ${v}\n`;
+    }
+  }
+
+  return ini;
+}
+
+/**
+ * Save config.ini to the workspace Marlin directory.
+ *
+ * @param {object} data     Flat config data
+ * @param {string} wr       Workspace root
+ * @returns {string}        Path to the written config.ini
+ */
+function saveConfigIni(data, wr) {
+  const iniContent = flatDataToConfigIni(data);
+  const iniPath = path.join(wr, 'Marlin', 'config.ini');
+  fs.writeFileSync(iniPath, iniContent, 'utf8');
+  return iniPath;
+}
+
+// ============================================================
+// Backup system
+// ============================================================
+
+/**
+ * Back up old config files before migration.
+ * Creates a timestamped backup in config/backup/ within the workspace.
+ *
+ * @param {string} wr  Workspace root
+ * @returns {string|null} Backup directory path, or null on failure.
+ */
+function backupConfigs(wr) {
+  const backupDir = path.join(wr, 'config', 'backup');
+  if (!fs.existsSync(backupDir))
+    fs.mkdirSync(backupDir, { recursive: true });
+
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+  const destDir = path.join(backupDir, `pre-migrate-${stamp}`);
+  fs.mkdirSync(destDir, { recursive: true });
+
+  const filesToBackup = ['Configuration.h', 'Configuration_adv.h', 'config.ini'];
+  let backedUp = 0;
+  for (const fname of filesToBackup) {
+    const src = path.join(wr, 'Marlin', fname);
+    if (fs.existsSync(src)) {
+      fs.copyFileSync(src, path.join(destDir, fname));
+      backedUp++;
+    }
+  }
+
+  // Also copy the Conditionals_LCD.h if it exists in the workspace
+  const condSrc = path.join(wr, 'Marlin', 'src', 'inc', 'Conditionals_LCD.h');
+  if (fs.existsSync(condSrc))
+    fs.copyFileSync(condSrc, path.join(destDir, 'Conditionals_LCD.h'));
+
+  return backedUp > 0 ? destDir : null;
+}
+
+// ============================================================
+// Migration result display
+// ============================================================
+
+/**
+ * Present the migration summary to the user via VSCode notifications.
+ *
+ * @param {object} result     Result from migRules.migrateConfig
+ * @param {string} fromVer    Source version
+ * @param {string} toVer      Target version
+ * @param {string} backupDir  Path to backup directory, or null
+ */
+function showMigrationResult(result, fromVer, toVer, backupDir) {
+  const changed = result.log.filter(l => !l.startsWith(' ') && !l.startsWith('\n') && !l.startsWith('---'));
+  const warnings = result.warnings.filter(w => !w.startsWith('⚠️') || true);
+
+  let msg = `Config migrated ${fromVer} → ${toVer}`;
+  if (changed.length) msg += `. ${changed.length} option changes.`;
+  if (warnings.length) msg += `. ${warnings.length} items need attention.`;
+  if (backupDir) msg += ` Backups in ${path.basename(path.dirname(backupDir))}/${path.basename(backupDir)}.`;
+
+  vw.showInformationMessage(msg, 'Show Details', 'Apply').then(choice => {
+    if (choice === 'Show Details') {
+      const panel = vw.createOutputChannel('ABM Config Migration');
+      panel.clear();
+
+      panel.appendLine(`═══ Marlin Config Migration: ${fromVer} → ${toVer} ═══\n`);
+
+      if (changed.length) {
+        panel.appendLine('Changes:');
+        for (const l of result.log) panel.appendLine(l);
+        panel.appendLine('');
+      }
+
+      if (warnings.length) {
+        panel.appendLine('Warnings (items needing your attention):');
+        for (const w of warnings) panel.appendLine(`  ${w}`);
+        panel.appendLine('');
+      }
+
+      panel.appendLine(`Backup: ${backupDir || 'none'}`);
+      panel.show();
+    } else if (choice === 'Apply') {
+      vc.executeCommand('abm.apply.ini');
+    }
+  });
+}
+
+// ============================================================
+// Main migration logic
+// ============================================================
+
+/**
+ * Core migration: read workspace configs, apply transforms, write config.ini.
+ *
+ * @param {string} [fromVer]   Source version (auto-detected from config if omitted)
+ * @param {string} [toVer]     Target version (auto-detected from Version.h if omitted)
+ * @returns {Promise<{ success: boolean, result: object|null, backupDir: string|null, iniPath: string|null }>}
+ */
+async function doMigration(fromVer, toVer) {
+  const wr = marlin.workspaceRoot;
+  if (!wr) {
+    vw.showWarningMessage('No workspace open. Open a Marlin folder first.');
+    return { success: false };
+  }
+
+  // --- Step 1: Detect versions ---
+  const vi = marlin.extractVersionInfo();
+  const srcHex = fromVer || vi.hexc;
+  const tgtHex = toVer || vi.hexv;
+  const srcVer = migRules.hexToVersion(srcHex);
+  const tgtVer = migRules.hexToVersion(tgtHex);
+
+  if (srcVer === tgtVer) {
+    vw.showInformationMessage('Configs are already up to date.');
+    return { success: false };
+  }
+  if (migRules.versionToHex(srcVer) > migRules.versionToHex(tgtVer)) {
+    vw.showWarningMessage(`Config version (${srcVer}) is newer than firmware (${tgtVer}). Nothing to do.`);
+    return { success: false };
+  }
+
+  // --- Step 2: Parse configs into flat data ---
+  const data = loadWorkspaceConfigs(srcHex);
+
+  if (Object.keys(data).length === 0) {
+    vw.showErrorMessage('Could not read config files. Check that Configuration.h and Configuration_adv.h exist.');
+    return { success: false };
+  }
+
+  // --- Step 3: Run migration transforms ---
+  const result = migRules.migrateConfig(data, srcVer, tgtVer);
+
+  // --- Step 4: Back up old configs ---
+  let backupDir = null;
+  try {
+    backupDir = backupConfigs(wr);
+  } catch (e) {
+    console.error('Backup failed:', e);
+    // Non-fatal — continue
+  }
+
+  // --- Step 5: Write migrated config.ini ---
+  const iniPath = saveConfigIni(result.config, wr);
+
+  // --- Step 6: Show results ---
+  showMigrationResult(result, srcVer, tgtVer, backupDir);
+
+  return { success: true, result, backupDir, iniPath };
+}
+
+// ============================================================
+// Public API
+// ============================================================
+
+/**
+ * Apply settings from old config files (picked by user) to the current
+ * default config files. Uses a file picker to locate the old configs.
+ */
+function do_import() {
+  vw.showOpenDialog({
+    canSelectFiles: true,
+    canSelectFolders: true,
+    canSelectMany: false,
+    openLabel: 'Select old Config folder'
+  }).then(uris => {
+    if (!uris || !uris.length) return;
+    // TODO: Read selected old configs, detect version, migrate
+    vw.showInformationMessage('Import feature is not yet implemented.');
+  });
+}
+
+/**
+ * Update old drop-in config files to the current Marlin version.
+ * Detects versions from the workspace config files and runs the
+ * full migration chain, writing a config.ini as output.
+ */
+function do_migrate() {
+  doMigration().catch(e => {
+    console.error('Migration error:', e);
+    vw.showErrorMessage(`Migration failed: ${e.message}`);
+  });
+}
+
+// ============================================================
+// Test / CLI entry point
+// ============================================================
+
+/**
+ * Run migration from the command line (for testing without VSCode).
+ *
+ * Usage:
+ *   node -e "
+ *     const imp = require('./abm/importer');
+ *     imp.testMigrate('/path/to/marlin/workspace').then(console.log);
+ *   "
+ *
+ * @param {string} wr         Workspace root (Marlin folder parent)
+ * @param {object} [opts]     Options: { fromVer?, toVer? }
+ * @returns {Promise<object>} Migration result
+ */
+async function testMigrate(wr, opts = {}) {
+  // Stub the VSCode API for headless operation
+  const stubs = {
+    showInformationMessage: () => Promise.resolve(),
+    showWarningMessage: () => {},
+    showErrorMessage: () => {},
+    showOpenDialog: () => Promise.resolve(null),
+    createOutputChannel: () => ({ appendLine: () => {}, clear: () => {}, show: () => {} })
+  };
+
+  // Temporarily replace vscode.window methods for headless mode
+  const origInfo = vw.showInformationMessage;
+  const origWarn = vw.showWarningMessage;
+  const origError = vw.showErrorMessage;
+  const origOpen = vw.showOpenDialog;
+  const origChannel = vw.createOutputChannel;
+
+  vw.showInformationMessage = stubs.showInformationMessage;
+  vw.showWarningMessage = stubs.showWarningMessage;
+  vw.showErrorMessage = stubs.showErrorMessage;
+  vw.showOpenDialog = stubs.showOpenDialog;
+  vw.createOutputChannel = stubs.createOutputChannel;
+
+  // Override workspace root for testing
+  const origRoot = marlin.workspaceRoot;
+  marlin.workspaceRoot = wr;
+
+  try {
+    // Manually load configs
+    const { files } = marlin;
+    const configPath = path.join(wr, 'Marlin', 'Configuration.h');
+    const advPath = path.join(wr, 'Marlin', 'Configuration_adv.h');
+    const versionPath = path.join(wr, 'Marlin', 'src', 'inc', 'Version.h');
+
+    if (!fs.existsSync(configPath)) {
+      return { success: false, error: 'No Configuration.h found at ' + configPath };
+    }
+
+    files.config.text = fs.readFileSync(configPath, 'utf8');
+    files.config_adv.text = fs.readFileSync(advPath, 'utf8');
+    if (fs.existsSync(versionPath))
+      files.version.text = fs.readFileSync(versionPath, 'utf8');
+
+    // Detect versions from config content
+    const hexc = migRules.hexToVersion(marlin._confValue(files.config.text, 'CONFIGURATION_H_VERSION'));
+    const hexv = migRules.hexToVersion(marlin._confValue(files.version.text, 'MARLIN_HEX_VERSION'));
+
+    if (opts.fromVer) files.config.text = files.config.text.replace(/CONFIGURATION_H_VERSION\s+\S+/, `CONFIGURATION_H_VERSION ${opts.fromVer}`);
+    if (opts.toVer) files.version.text = files.version.text.replace(/MARLIN_HEX_VERSION\s+\S+/, `MARLIN_HEX_VERSION ${opts.toVer}`);
+
+    return await doMigration(opts.fromVer || hexc, opts.toVer || hexv);
+  } finally {
+    marlin.workspaceRoot = origRoot;
+    vw.showInformationMessage = origInfo;
+    vw.showWarningMessage = origWarn;
+    vw.showErrorMessage = origError;
+    vw.showOpenDialog = origOpen;
+    vw.createOutputChannel = origChannel;
+  }
+}
+
+module.exports = {
+  do_import,
+  do_migrate,
+  testMigrate,
+  parseConfigsToFlatData,
+  flatDataToConfigIni,
+  saveConfigIni,
+  backupConfigs,
+};

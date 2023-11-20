@@ -499,3 +499,5 @@ form#showy {
   label { display: block; padding: 2px 0; }
   input[type="checkbox"] { position: relative; top: 0.2em; }
   }
+/* Display as needed */
+tr#update { display: none; }

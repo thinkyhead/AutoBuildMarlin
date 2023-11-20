@@ -213,6 +213,13 @@ function allFilesAreLoaded() {
   postValue('vers', version_info.vers);
   postValue('dlvers', version_info.vers);
 
+  // Show an "Import" button if configs are older
+  // Include required, actual config versions
+  postValue('hexv', version_info.hexv.toVers());
+  postValue('hexc', version_info.hexc.toVers());
+
+  postMessage({ command:'updater', show:(version_info.hexv != version_info.hexc) });
+
   const mb = marlin.configValue('MOTHERBOARD');
 
   if (mb) {
@@ -710,6 +717,10 @@ function handleMessageFromUI(m) {
 
     case 'monitor':           // Monitor button
       vc.executeCommand('platformio-ide.serialMonitor');
+      return;
+
+    case 'migrate':           // Update to X.X.X button
+      vc.executeCommand('abm.migrate');
       return;
 
     case 'show_on_startup':   // Show on Startup checkbox
