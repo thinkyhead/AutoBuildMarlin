@@ -182,6 +182,8 @@ function refreshAll(onSuccess, onError) {
 var version_info;
 function extractVersionInfo() {
   version_info = {
+    hexv: _confValue(files.version.text, 'MARLIN_HEX_VERSION'),
+    hexc: _confValue(files.config.text, 'CONFIGURATION_H_VERSION'),
     vers: _confValue(files.version.text, 'SHORT_BUILD_VERSION').dequote(),
     date: _confValue(files.version.text, 'STRING_DISTRIBUTION_DATE').dequote(),
     auth: _confValue(files.config.text, 'STRING_CONFIG_H_AUTHOR').dequote()

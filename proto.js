@@ -36,6 +36,12 @@ function init() {
   String.prototype.line = function(num)        { var arr = this.split(/\r?\n|\r/); return num < arr.length ? arr[1*num] : ''; };
   String.prototype.replaceLine = function(num,txt) { var arr = this.split(/\r?\n|\r/); if (num < arr.length) { arr[num] = txt; return arr.join('\n'); } else return this; }
   String.prototype.toLabel = function()        { return this.replace(/[\[\]]/g, '').replace(/_/g, ' ').toTitleCase(); }
+  String.prototype.toVers = function()         {
+    return this.replace(
+      /([0-9]{2})([0-9]{2})([0-9]{2})([0-9]{2})/,
+      function(m,p1,p2,p3,p4) { return `${1*p1}.${1*p2}.${1*p3}` + (1*p4 ? `.${1*p4}` : ''); }
+    );
+  }
   String.prototype.toTitleCase = function()    { return this.replace(/([A-Z])(\w+)/gi, function(m,p1,p2) { return p1.toUpperCase() + p2.toLowerCase(); }); }
   Number.prototype.limit = function(m1, m2)  {
     if (m2 == null) return this > m1 ? m1 : this;

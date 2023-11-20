@@ -72,6 +72,9 @@
     </form>
     <table id="info">
       <tr><th>Firmware:</th>      <td><div>Marlin <span id="info-vers"></span></div><div id="info-date" class="abm-caption"></div></td></tr>
+      <tr id="update">
+        <th>Config Rev:</th>      <td><span id="info-hexc"></span> <button type="button" onclick="msg({ command:'migrate' })">⚠️ Update to <span id="info-hexv"></span></button></td>
+      </tr>
       <tr><th>Config By:</th>     <td><span id="info-auth"></span></td></tr>
       <tr><th>Machine Name:</th>  <td><div id="info-machine"></div><div id="info-machine-desc" class="abm-caption"></div></td></tr>
       <tr><th>Extruders:</th>     <td><div id="info-extruders"></div><div id="info-extruder-desc" class="abm-caption"></div></td></tr>

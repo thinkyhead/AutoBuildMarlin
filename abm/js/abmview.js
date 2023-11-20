@@ -88,6 +88,11 @@ var ABM = (function(){
           // Update a single define element in the UI
           break;
 
+        case 'updater':
+          const $imp = $('#update');
+          m.show ? $imp.show() : $imp.hide();
+          break;
+
         // postValue()
         case 'info':
           var $dest = $('#info-' + m.tag).text('');

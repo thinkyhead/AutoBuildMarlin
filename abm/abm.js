@@ -231,6 +231,13 @@ function allFilesAreLoaded() {
   postValue('auth', version_info.auth);
   postValue('vers', version_info.vers);
 
+  // Show an "Import" button if configs are older
+  // Include required, actual config versions
+  postValue('hexv', version_info.hexv.toVers());
+  postValue('hexc', version_info.hexc.toVers());
+
+  postMessage({ command:'updater', show:(version_info.hexv != version_info.hexc) });
+
   const mb = marlin.configValue('MOTHERBOARD');
 
   if (mb) {
@@ -726,6 +733,10 @@ function handleMessage(m) {
       vc.executeCommand('platformio-ide.serialMonitor');
       return;
 
+    case 'migrate':           // Update to X.X.X button
+      vc.executeCommand('abm.migrate');
+      return;
+
     case 'show_on_startup':   // Show on Startup checkbox
       prefs.set_show_on_startup(m.value);
       return;
@@ -820,7 +831,7 @@ function run_command(action) {
     panel.onDidChangeViewState(
       () => {
         if (panel.active) {
-          postMessage({ command: 'check', name:'show_on_startup',  state:prefs.show_on_startup() });
+          postMessage({ command: 'check', name:'show_on_startup', state:prefs.show_on_startup() });
           postMessage({ command: 'check', name:'silent_build', state:prefs.silent_build() });
           postMessage({ command: 'check', name:'auto_reveal', state:prefs.auto_reveal() });
         }

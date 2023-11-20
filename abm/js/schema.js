@@ -346,6 +346,57 @@ class ConfigSchema {
   }
 
   /**
+   * @brief Get all active items that pass the given test function, in schema order.
+   *
+   * @param {function} fn A function like: (itm) => { return itm.type == "string"; }
+   * @param {int} before The maximum sid to consider. (optional)
+   * @param {int} limit The maximum number of items to return. (optional)
+   * @return Array of item references.
+   */
+  getActiveItems(fn, before, limit) {
+    return getItems(it => it.evaled && fn(it), before, limit)
+  }
+
+  /**
+   * Find the first item in the schema passing a given test before an optional sid.
+   *
+   * @param {function} fn A function taking an item and returning true/false.
+   * @param {int} before The last index allowed for the item.
+   * @return The item found, or null.
+   */
+  firstItemPassing(fn, before=9999) {
+    for (const [sect, opts] of Object.entries(this.data)) {
+      for (const foo of opts) {
+        if (foo instanceof Array) {
+          for (const item of foo) if (this.definedBefore(item, before) && fn(item)) return item;
+        }
+        else if (this.definedBefore(foo, before) && fn(foo)) return foo;
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Find the first item in the schema passing a given test before an optional sid.
+   *
+   * @param {function} fn A function taking an item and returning true/false.
+   * @param {int} before The last index allowed for the item.
+   * @return The item found, or null.
+   */
+  lastItemPassing(fn, before=9999) {
+    var outitem = null;
+    for (const [sect, opts] of Object.entries(this.data)) {
+      for (const foo of opts) {
+        if (foo instanceof Array) {
+          for (const item of foo) if (this.definedBefore(item, before) && fn(item)) outitem = item;
+        }
+        else if (this.definedBefore(foo, before) && fn(foo)) outitem = foo;
+      }
+    }
+    return outitem;
+  }
+
+  /**
    * Find the first item in the schema with a given name before an optional sid.
    *
    * @param {string} name Name of the item to find.
@@ -405,6 +456,9 @@ class ConfigSchema {
     // Get the last item prior to the passed item that has the given name.
     // This function doesn't care if the item is enabled or not.
     function priorItemNamed(name) { return self.lastItemWithName(name, initem.sid); }
+
+    // Reimplement priorItemNamed using lastItemPassing, just for testing
+    function priorPassingItemNamed(name) { return self.lastItemPassing(it => it.name == name, initem.sid); }
 
     // A cond string is a list of conditions using Marlin macros
     // that we can convert into JavaScript and eval. Later we can
