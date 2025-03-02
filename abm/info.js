@@ -75,7 +75,8 @@ class InfoPanelProvider {
     // Tell the webview to display something
     // Received by infoview.js:handleMessageToUI
     function updateWebview() {
-      wv.postMessage({ type: 'say', text: "hello" }); // infoview.js:handleMessageToUI
+      const mb = schemas.basic.lastItemWithName("MOTHERBOARD")?.value;
+      wv.postMessage({ type: 'mb', text: mb });
     }
 
     schemas = schema.combinedSchema(marlin, fs);

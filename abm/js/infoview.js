@@ -42,8 +42,9 @@ $(function () {
   function handleMessageToUI(m) {
     log("infoview.js : handleMessageToUI", m);
     switch (m.type) {
-      // Update the whole form in response to an external change.
-      case 'info':
+      // Update display elements with provided data
+      case 'mb':
+        $('body').text(m.text);
         //drawInfo(m.data);
         break;
 
