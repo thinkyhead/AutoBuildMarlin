@@ -943,6 +943,10 @@ class ConfigSchema {
       return cond;
     }
 
+    /**
+     * Find parentheses that wrap only one entity and
+     * return their indexes in an array.
+     */
     function findRedundantParentheses(code) {
 
       // Check if parentheses belong to a function call
@@ -957,22 +961,27 @@ class ConfigSchema {
       function isRedundant(code, openIndex, closeIndex) {
         let inner = code.slice(openIndex + 1, closeIndex).trim();
 
-        // Single identifier or number (e.g., `(x)`, `(42)`)
-        if (/^\w+$/.test(inner)) return true;
+        // Simple function call
+        if (/^[a-z_]\w*\s*\([^)]*\)$/i.test(inner)) return true;
 
-        // Function call (e.g., `(defined("mysymbol"))`)
-        if (/^[a-zA-Z_]\w*\s*\(.*\)$/.test(inner)) return true;
+        // Number
+        if (/^-?\d+(\.\d+)?$/.test(inner)) return true;
 
-        // If it's a nested set of parentheses like ((EXPR)), check the inside
+        // Single identifier
+        if (/^[a-z_]\w*$/i.test(inner)) return true;
+
+        // If it's a nested set of parentheses like ((EXPR)) or ((EXPR) && (EXPR)), check the inside.
         if (inner.startsWith('(') && inner.endsWith(')')) {
-          let depth = 0;
-          for (let i = 0; i < inner.length; i++) {
+          let depth = 1;
+          for (let i = 1; i < inner.length; i++) {
             if (inner[i] === '(') depth++;
             if (inner[i] === ')') depth--;
-            if (depth === 0 && i < inner.length - 1) return false; // There’s more content outside
+            if (depth === 0 && i < inner.length - 1) return false; // A closing paren that isn't last?
           }
           return true; // The whole thing is wrapped again => redundant
         }
+
+        // Anything else, including empty
         return false;
       }
 
@@ -1015,6 +1024,8 @@ class ConfigSchema {
       return result;
     }
 
+    //const testcase = removeRedundantParentheses("((((notFromHere(ok) && (FROM_HERE))))) || (FROG_SPIT)");
+
     const before_mangle = cond;
 
     cond = expand_MAP(cond);
@@ -1026,13 +1037,13 @@ class ConfigSchema {
       .replace(/\b([A-Z_]\w*)\b(\s*([^(,]|$))/g, 'OTHER($1)$2')                     // LOOSE_SYMBOL               => OTHER(LOOSE_SYMBOL)
       .replace(/([A-Z_]\w+\s*\(|,\s*)OTHER\(([^()]+)\)/g, '$1$2')                   // ANYCALL(OTHER(ABCD)        => ANYCALL(ABCD    ... , OTHER(ABCD) => , ABCD
       .replace(/\b(defined)\b\s*\(?\s*OTHER\s*\(\s*([^()]+)\s*\)\s*\)?/g, '$1($2)') // defined.OTHER(ABCD).       => defined(ABCD)
-      .replace(/\b([A-Z_]\w*)\b([^(])/gi, '"$1"$2')                                 // ABCD[^(]                   => "ABCD"
+      .replace(/\b([A-Z_]\w*)\b([^(])/gi, "'$1'$2")                                 // ABCD[^(]                   => 'ABCD'
       ;
 
     cond = removeRedundantParentheses(cond);
 
     try {
-      //initem.requirez = cond;
+      initem.requirez = cond;
       initem.evaled = eval(cond) ? true : false;
     }
     catch (e) {
