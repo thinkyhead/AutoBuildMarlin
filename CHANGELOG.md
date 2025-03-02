@@ -2,6 +2,10 @@
 
 The following enhancements and changes have been made to ***Auto Build Marlin***.
 
+## 2.1.73
+- Schema: Fix `HAS_DRIVER` to use expanded arguments
+- Schema: Combine special requirements matching calls with `||`
+
 ## 2.1.72
 - ABM Panel: List all pins files included for `MOTHERBOARD`
 - ABM Panel: Provide more space for main content
