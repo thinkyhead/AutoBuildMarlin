@@ -217,12 +217,12 @@ function extractTempSensors() {
 // Return hashed array { mb, pins_files, archs, archs_arr, envs, short, description, (has_debug), (error) }
 //
 var board_info;
-function extractBoardInfo(mb) {
+function extractBoardInfo(mb, pinstext=files.pins.text, boardstext=files.boards.text) {
   let r, out = { has_debug: false }, sb = mb.replace('BOARD_', '');
 
   // Get the include line matching the board
   const lfind = new RegExp(`if\\s*MB\\(.*\\b${sb}\\b.*\\).*\n\\s*(#include.+)\n`, 'g');
-  if ((r = lfind.exec(files.pins.text))) {
+  if ((r = lfind.exec(pinstext))) {
 
     let inc_line = r[1];
 
@@ -279,17 +279,17 @@ function extractBoardInfo(mb) {
 
     // Get the description from the boards.h file
     const cfind = new RegExp(`#define\\s+${mb}\\s+\\d+\\s*//(.+)`, 'gm');
-    r = cfind.exec(files.boards.text);
+    r = cfind.exec(boardstext);
     out.description = r ? r[1].trim() : '';
   }
   else {
     const ofind = new RegExp(`#error\\s+"(${mb} is no longer [^.]+)`, 'g'),
           bfind = new RegExp(`#error\\s+"(${mb} (has been renamed|is now) [^.]+)`, 'g');
-    if ((r = ofind.exec(files.pins.text))) {
+    if ((r = ofind.exec(pinstext))) {
       out.error = r[1];
       out.short = `Unsupported MOTHERBOARD`;
     }
-    else if ((r = bfind.exec(files.pins.text))) {
+    else if ((r = bfind.exec(pinstext))) {
       // TODO: Show a "Fix" button to update an old board name.
       out.error = r[1];
       out.fix = `fixboard("${mb}")`;
