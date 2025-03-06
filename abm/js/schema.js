@@ -963,24 +963,26 @@ class ConfigSchema {
 
         // Simple function call
         if (/^[a-z_]\w*\s*\([^)]*\)$/i.test(inner)) return true;
+        //if (/^\(\s*[a-z_]\w*\s*\([^)]*\)\s*\)$/i.test(inner)) return true;
 
         // Number
         if (/^-?\d+(\.\d+)?$/.test(inner)) return true;
+        //if (/^\(\s*-?\d+(\.\d+)?\s*\)$/.test(inner)) return true;
 
         // Single identifier
         if (/^[a-z_]\w*$/i.test(inner)) return true;
+        //if (/^\(\s*[a-z_]\w*\s*\)$/i.test(inner)) return true;
 
         // If it's a nested set of parentheses like ((EXPR)) or ((EXPR) && (EXPR)), check the inside.
-        if (inner.startsWith('(') && inner.endsWith(')')) {
-          let depth = 1;
-          for (let i = 1; i < inner.length; i++) {
-            if (inner[i] === '(') depth++;
-            if (inner[i] === ')') depth--;
-            if (depth === 0 && i < inner.length - 1) return false; // A closing paren that isn't last?
-          }
-          return true; // The whole thing is wrapped again => redundant
-        }
-
+        //if (inner.startsWith('(') && inner.endsWith(')')) {
+        //  let depth = 1;
+        //  for (let i = 1; i < inner.length; i++) {
+        //    if (inner[i] === '(') depth++;
+        //    if (inner[i] === ')') depth--;
+        //    if (depth === 0 && i < inner.length - 1) return false; // A closing paren that isn't last?
+        //  }
+        //  return true; // The whole thing is wrapped again => redundant
+        //}
         // Anything else, including empty
         return false;
       }
@@ -1024,7 +1026,10 @@ class ConfigSchema {
       return result;
     }
 
-    //const testcase = removeRedundantParentheses("((((notFromHere(ok) && (FROM_HERE))))) || (FROG_SPIT)");
+    let testcase1 = removeRedundantParentheses("((((notFromHere(ok) && (FROM_HERE))))) || (FROG_SPIT)");
+    testcase1 = removeRedundantParentheses(testcase1);
+    testcase1 = removeRedundantParentheses(testcase1);
+    let testcase2 = removeRedundantParentheses("(((a + (b))))");
 
     const before_mangle = cond;
 
