@@ -291,8 +291,8 @@ function showChain(from, to) {
   console.log(`\n  Version chain: ${from} → ${to}\n`);
   let count = 0;
   for (const step of rules.migrationSteps) {
-    if (rules.compareVersions(step.from, to) >= 0) break;
-    if (rules.compareVersions(step.to, from) <= 0 && step.from !== step.to) continue;
+    if (rules.versionToHex(step.from) >= rules.versionToHex(to)) break;
+    if (rules.versionToHex(step.to) <= rules.versionToHex(from) && step.from !== step.to) continue;
     count++;
     console.log(`    ${count}. ${step.from} → ${step.to}${step.note ? ` (${step.note})` : ''}`);
   }

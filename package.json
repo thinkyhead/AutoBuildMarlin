@@ -44,7 +44,8 @@
   "homepage": "https://github.com/MarlinFirmware/AutoBuildMarlin/blob/master/README.md",
   "markdown": "github",
   "extensionKind": [
-    "workspace", "ui"
+    "workspace",
+    "ui"
   ],
   "categories": [
     "Formatters",
@@ -324,10 +325,17 @@
   "extensionDependencies": [
     "platformio.platformio-ide"
   ],
+  "scripts": {
+    "test": "vscode-test",
+    "test:unit": "node test-migration.js",
+    "test:pipeline": "node test-migration-pipeline.js"
+  },
   "devDependencies": {
+    "@types/node": "^10.14.17",
     "@types/vscode": "^1.34.0",
-    "jslint": "^0.12.1",
-    "@types/node": "^10.14.17"
+    "@vscode/test-cli": "^0.0.12",
+    "@vscode/test-electron": "^3.0.0",
+    "jslint": "^0.12.1"
   },
   "__metadata": {
     "id": "aeed6cc8-3e27-4932-8212-161d73cdee2d",
