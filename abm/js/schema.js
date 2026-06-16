@@ -1101,6 +1101,47 @@ class ConfigSchema {
   }
 
   /**
+   * Export the schema's enabled items as a config.ini format string.
+   * Only items that are uncommented (enabled) and passing their conditions
+   * (evaled !== false) are included. The output uses the standard Marlin
+   * config.ini format: lowercase names padded to 40 characters, ` = `,
+   * then the value. Empty values (switch-type items) are written as `on`.
+   *
+   * @param {object} [opts]           Options
+   * @param {boolean} [opts.sections]  Include a [config:*] section header
+   * @param {string}  [opts.key]       Section key when sections=true (default 'basic')
+   * @param {string[]}[opts.skip]      Option names to skip (default: CONFIGURATION_H_VERSION et al)
+   * @param {boolean}[opts.header]     Include the standard header block (default true)
+   * @returns {string} config.ini formatted content
+   */
+  exportConfigIni(opts = {}) {
+    const fmt = (name, val) => String(name).padEnd(40) + ' = ' + String(val),
+         skip = opts.skip || ['CONFIGURATION_H_VERSION', 'CONFIGURATION_ADV_H_VERSION', 'CONFIG_EXAMPLES_DIR', 'LCD_HEIGHT', 'CONFIG_EXPORT'];
+
+    let ini = '';
+    if (opts.header !== false)
+      ini += '#\n# Marlin Firmware\n# config.ini — Options to apply before the build\n#\n';
+
+    if (opts.sections)
+      ini += '[config:' + (opts.key || 'basic') + ']\n';
+
+    for (const item of this.iterateDataBySID()) {
+      if (!item.name || skip.includes(item.name)) continue;
+      if (!item.enabled || item.evaled === false) continue;
+
+      let val = item.value;
+      if (val === '' || val === null || val === undefined)
+        val = 'on';
+      else if (typeof val === 'boolean')
+        val = val ? 'true' : 'false';
+
+      ini += fmt(item.name.toLowerCase(), String(val)) + '\n';
+    }
+
+    return ini;
+  }
+
+  /**
    * @brief Init the schema data from Configuration text.
    *
    * @description The data is a dictionary keyed by the option name:
