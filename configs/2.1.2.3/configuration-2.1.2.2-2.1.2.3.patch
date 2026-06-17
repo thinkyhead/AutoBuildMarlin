@@ -1,0 +1,11 @@
+--- /Users/thinkyhead/Projects/Maker/VSCode/AutoBuildMarlin/configs/2.1.2.2/Configuration.h	2026-06-17 12:44:01
++++ /Users/thinkyhead/Projects/Maker/VSCode/AutoBuildMarlin/configs/2.1.2.3/Configuration.h	2026-06-17 12:44:04
+@@ -37,7 +37,7 @@
+  *
+  * Advanced settings can be found in Configuration_adv.h
+  */
+-#define CONFIGURATION_H_VERSION 02010202
++#define CONFIGURATION_H_VERSION 02010203
+ 
+ //===========================================================================
+ //============================= Getting Started =============================
