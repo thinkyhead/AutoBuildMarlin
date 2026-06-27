@@ -2,6 +2,8 @@
 
 The following enhancements and changes have been made to ***Auto Build Marlin***.
 
+- TODO: Config options defined from other options inherit their type
+
 ## 2.1.88
 - ABM Panel: Download Example Configurations (#101 by @StevilKnevil)
 
