@@ -20,7 +20,7 @@ const path = require('path');
 const fs = require('fs');
 
 // Project root
-const ROOT = __dirname;
+const ROOT = path.join(__dirname, '../..');
 
 // ============================================================
 // Import schema & migration rules directly
@@ -47,8 +47,8 @@ Number.prototype.limit = function (m1, m2) {
 };
 
 // Load schema module
-const { ConfigSchema } = require('./abm/js/schema');
-const migRules = require('./abm/migration-rules');
+const { ConfigSchema } = require('../../abm/js/schema');
+const migRules = require('../../abm/migration-rules');
 
 // ============================================================
 // Config parsing (simplified — no Conditionals_LCD.h)

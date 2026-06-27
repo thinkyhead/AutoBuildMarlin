@@ -15,8 +15,8 @@ AutoBuildMarlin/           # VSCode Extension root
 │   ├── docs.js            # Docs panel provider
 │   ├── format.js          # C++ formatter for Marlin code
 │   ├── js/
-│   │   ├── marlin.js      # Data model — reads/parses Marlin config files, extracts board/version info
-│   │   ├── schema.js      # ConfigSchema class — parses #define to structured dict (bysec/bysid)
+│   │   ├── marlin.js      # Accessors and utilities — scrape Marlin config files to extract board/version info
+│   │   ├── schema.js      # ConfigSchema class — parses Marlin config files to structured dict (bysec/bysid)
 │   │   ├── editview.js    # WebView-side: builds config editor form from schema, handles edits
 │   │   ├── abmview.js     # WebView-side: main panel logic, handles extension messages
 │   │   ├── vsview.js      # Provides _msg() helper using acquireVsCodeApi()
@@ -30,6 +30,14 @@ AutoBuildMarlin/           # VSCode Extension root
 │   ├── css/               # Stylesheets
 │   └── img/               # Icons and images
 └── resources/             # Extension-level resources (toolbar icons)
+├── test/
+│   ├── suite/             # Test suite (Mocha-based)
+│   │   ├── index.js              # VSCode integration test entry point
+│   │   ├── migration.test.js     # Migration integration tests (requires VSCode API)
+│   │   ├── migration-rules.test.js   # Migration rules unit tests (standalone)
+│   │   └── migration-pipeline.test.js # Full pipeline tests with embedded configs
+│   └── fixtures/
+│       └── marlin-workspace/ # Test workspace with sample Marlin configs
 ```
 
 ## Two Independent WebView Systems
@@ -49,9 +57,9 @@ There are **two distinct webview systems** that share no code:
 **WebView side** (`abmview.js`):
 - Singleton `ABM` object with `init()`, `handleMessageToUI(event)`
 - `msg(m)` sends messages back to extension (via `_msg()` from vsview.js)
-- `$('body').click(...)` hides error messages
+- `$('body').click(...)` dismisses error messages
 - `.subtabs button` click triggers `abm_pane()` to show config sub-panes
-- `#showy input` change events send commands to update settings
+- `#showy input` checkbox changes send commands to update settings
 - Alt key toggles `.clean` buttons to `.purge`
 
 **Panel lifecycle:**
@@ -114,50 +122,6 @@ There are **two distinct webview systems** that share no code:
 | Editor: Extension → WebView | `{ type:'update', bysec: {...} }` | `my.wv.postMessage()` → `window.addEventListener('message', ...)` |
 | Editor: WebView → Extension | `{ type:'change', data: { sid, enabled, value, line } }` | `vscode.postMessage()` → `my.wv.onDidReceiveMessage(handler)` |
 
-## MOTHERBOARD Field in the Config Editor
-
-### Current State
-
-The MOTHERBOARD field is parsed as part of Configuration.h during schema import.
-
-**In `schema.js` (line 1712-1714):**
-```javascript
-if (define_name === "MOTHERBOARD" && boards?.length) {
-  define_info.options = boards;
-}
-```
-
-The `boards` variable is declared as `const boards = []` at line 1097 but **never populated**. This means MOTHERBOARD will always fall through to the plain text `<input>` in `addOptionLine()` (editview.js line 712).
-
-When boards *were* populated, MOTHERBOARD would render as a `<select>` dropdown with all board names as options.
-
-**In `marlin.js`:**
-- `files.boards` is defined as `{ name: 'boards.h', path: ['src', 'core'] }` (line 23)
-- `files.boards.text` is read during `refreshAll()` — it contains the raw text of `Marlin/src/core/boards.h`
-- `extractBoardInfo(mb, mb_env)` reads `files.boards.text` to extract board description for display
-- No function currently exists to scrape board names from boards.h
-
-### How boards.h is Structured
-
-`Marlin/src/core/boards.h` typically contains `#define BOARD_*` entries:
-```c
-#define BOARD_RAMPS_14_EFB  1020   // RAMPS 1.4
-#define BOARD_RAMPS_14_EEB  1020   // RAMPS 1.4 (E1/E2/B)
-...
-```
-
-To get the list of board names, we'd parse `files.boards.text` for `#define BOARD_` lines and extract the define name (e.g., `BOARD_RAMPS_14_EFB`).
-
-### What MOTHERBOARD Field Needs
-
-The user wants an **auto-complete text input** (like a `<datalist>`) — when you start typing, matching board names appear in a filtered list below. This behaves like a regular input field but with a dropdown of suggestions.
-
-Currently the field is a plain `<input type="text">` at line 712 of `editview.js` because no options are set. To implement auto-complete:
-
-1. **Populate `boards` in schema.js** by scraping board names from `boards.h` text during `combinedSchema()`
-2. **Change the MOTHERBOARD field render** from a `<select>` (if options were set) or plain `<input>` to an `<input>` with `<datalist>` (HTML5 autocomplete)
-3. In `addOptionLine()`, detect the MOTHERBOARD item and create the autocomplete input
-
 ## Extending the Architecture
 
 ### Adding a New Auto-Complete Field
@@ -181,3 +145,73 @@ Currently the field is a plain `<input type="text">` at line 712 of `editview.js
 - **Multi-change batching**: `start_multi_update()`/`end_multi_update()` collects changes for atomic updates
 - **Debouncing**: File change watch uses timeout debouncing (2s), edit fields use 500ms delay
 - **IPC file**: A temp file path-based IPC mechanism signals command completion from Terminal to extension
+
+## Config Migration Feature (ABM Importer)
+
+### Overview
+The ABM extension includes a configuration migration system to upgrade old Marlin Configuration.h / Configuration_adv.h files to newer versions. This is useful when users open legacy printer configurations.
+
+### Architecture
+The migration pipeline consists of:
+1. **Version Detection** — Extract `CONFIGURATION_H_VERSION` (hex) and `MARLIN_HEX_VERSION` from source files
+2. **Schema Parsing** — Parse both configs using `ConfigSchema` with the correct Conditionals file (`Conditionals_LCD.h` for ≤2.1.2.7, split `Conditionals-1/2/3.h` for ≥2.1.3)
+3. **Flat Data Extraction** — Convert parsed schema to flat `{ name: { value, enabled } }` format
+4. **Migration Rules** — Apply version-to-version transforms from `migration-rules.js` (46 steps, 1.1.9 → 2.2.0)
+5. **config.ini Output** — Write migrated config as `config.ini` (Marlin's preferred migration format)
+6. **Backup** — Timestamped backup of original configs before migration
+7. **Apply to Target Configs** — Merge migrated data into fresh embedded configs for `tgtVer`, write updated `Configuration.h` / `Configuration_adv.h` (human-readable, diffable)
+
+### Migration Rules (`abm/migration-rules.js`)
+- **46 version steps** covering 1.1.9 → 2.2.0
+- **~100+ simple renames** (declarative tables)
+- **25 complex transform functions** (imperative escape hatches)
+- **Idempotent** — re-running migration on already-migrated config produces no changes
+- **Pure Node.js** — no VSCode dependency, runnable from shell
+
+### Embedded Configs (`configs/`)
+Pre-downloaded default configurations for each Marlin version, used to:
+- Provide `Conditionals_LCD.h` / split Conditionals for schema parsing via `nearestConfigVersion()`
+- Serve as baseline for integration testing
+- Current coverage: 1.1.9 through 2.1.3 (28 versions)
+
+### Test Suite (`test/suite/`)
+| File | Type | Run From |
+|------|------|----------|
+| `migration.test.js` | Integration (requires VSCode API) | Extension Development Host |
+| `migration-rules.test.js` | Unit (standalone) | `node test/suite/migration-rules.test.js` |
+| `migration-pipeline.test.js` | End-to-end (embedded configs) | `node test/suite/migration-pipeline.test.js` |
+
+All 28 pipeline tests pass (1.1.9 → 2.1.3 all migrate to 2.1.2.1). Unit tests: 3/3 pass.
+
+### Importer Module (`abm/importer.js`)
+- `do_migrate()` — **Complete**. Full pipeline: detect version → parse → migrate → backup → write config.ini → apply to target configs
+- `do_import()` — **Stub**. Needs implementation for importing printers from example configs.
+- `parseConfigsToFlatData()` — Parses raw config text to flat format using ConfigSchema
+- `flatDataToConfigIni()` — Converts flat data to config.ini format (lowercase, 40-char padded, `#` comments)
+- `saveConfigIni()` — Wrapper supporting both ConfigSchema and flat data inputs
+- `applyToTargetConfigs()` — **NEW**. Merges migrated flat data into fresh embedded configs for `tgtVer`, writes updated `Configuration.h` / `Configuration_adv.h`
+
+### Refined Plan — Per-Step Conditionals Re-evaluation
+
+**Problem:** Current `migrateConfig()` applies all transforms to flat data without re-parsing. `enabled` states freeze at initial parse; if a transform changes a dependency (e.g., enables `HAS_LCD`), downstream `require ENABLED(HAS_LCD)` options stay incorrectly disabled. New default values in intermediate configs are also missed.
+
+**Solution:** At each version step, re-apply accumulated changes to a fresh embedded config baseline and re-parse:
+
+```
+For each step srcVer → nextVer:
+  1. Apply step transforms to flat config (current behavior)
+  2. Generate modified Configuration.h/_adv.h text:
+     a. Read fresh embedded config for nextVer from configs/nextVer/
+     b. Merge: user values override, but embedded new options & defaults preserved
+  3. Re-parse via ConfigSchema with nextVer's Conditionals
+  4. Continue with refreshed flat data
+```
+
+**Merge strategy:** Track `userSet: true` flag per option. User values win; embedded defaults fill gaps for new options; user's explicit disable beats new default enable.
+
+**Trade-off:** Slower (full parse per step), more complex merge. Mitigation: Later, encode default-value changes explicitly in migration rules (e.g., "2.0.8: MIN_STEPS_PER_SEGMENT default 6→1") to make re-import optional/verification-only.
+
+**See:** `docs/migration-process.md` → "Refined Plan: Re-evaluate Conditionals Per Migration Step" for full details.
+
+### Future Work — Conditionals Preprocessing & JSON Storage
+**Current state:** Historical config files are included for import/migrate. These could potentially be pre-processed into minimized JSON.

@@ -14,7 +14,7 @@
 
 'use strict';
 
-const rules = require('./abm/migration-rules');
+const rules = require('../../abm/migration-rules');
 const path = require('path');
 const fs = require('fs');
 

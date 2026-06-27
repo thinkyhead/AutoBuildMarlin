@@ -15,6 +15,8 @@ exports.run = function () {
   return new Promise((resolve, reject) => {
     // Add all test files
     mocha.addFile(path.resolve(__dirname, 'migration.test.js'));
+    mocha.addFile(path.resolve(__dirname, 'migration-rules.test.js'));
+    mocha.addFile(path.resolve(__dirname, 'migration-pipeline.test.js'));
 
     try {
       mocha.run(failures => {

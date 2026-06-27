@@ -750,40 +750,17 @@ function _t2121_2122_btt_mini(config, log, w) {
   }
 }
 
-// --- 2.1.2.2 → 2.1.2.3 ---
-// (unknown changes — warn)
-function _t2122_2123_unknown(config, log, w) {
-  w.push('⚠️ Migration from 2.1.2.2 to 2.1.2.3 — unknown option changes. Review output manually.');
-}
-
-// --- 2.1.2.3 → 2.1.2.4 ---
-function _t2123_2124_unknown(config, log, w) {
-  w.push('⚠️ Migration from 2.1.2.3 to 2.1.2.4 — unknown option changes. Review output manually.');
-}
-
-// --- 2.1.2.4 → 2.1.2.5 ---
-function _t2124_2125_unknown(config, log, w) {
-  w.push('⚠️ Migration from 2.1.2.4 to 2.1.2.5 — unknown option changes. Review output manually.');
-}
-
-// --- 2.1.2.5 → 2.1.2.6 ---
-
 function _t2125_2126_pid_case(config, log, w) {
   // DEFAULT_k[pidcf] → DEFAULT_K[PIDCF] (uppercase)
-  const pidLower = ['DEFAULT_Kp', 'DEFAULT_Ki', 'Kd', 'DEFAULT_Kf', 'DEFAULT_Kc'],
-        pidUpper = ['DEFAULT_KP', 'DEFAULT_KI', 'KD', 'DEFAULT_KF', 'DEFAULT_KC'];
+  const pidLower = ['DEFAULT_Kp', 'DEFAULT_Ki', 'DEFAULT_Kd', 'DEFAULT_Kf', 'DEFAULT_Kc', 'DEFAULT_Kp_LIST', 'DEFAULT_Ki_LIST', 'DEFAULT_Kd_LIST'],
+        pidUpper = ['DEFAULT_KP', 'DEFAULT_KI', 'DEFAULT_KD', 'DEFAULT_KF', 'DEFAULT_KC', 'DEFAULT_KP_LIST', 'DEFAULT_KI_LIST', 'DEFAULT_KD_LIST'];
   for (let i = 0; i < pidLower.length; i++) {
     if (pidLower[i] in config) {
       _set(config, pidUpper[i], config[pidLower[i]].value);
       _remove(config, log, pidLower[i]);
     }
   }
-  // DEFAULT_Kpid_LIST → DEFAULT_KPID_LIST
-  if ('DEFAULT_Kpid_LIST' in config) {
-    _set(config, 'DEFAULT_KPID_LIST', config['DEFAULT_Kpid_LIST'].value);
-    _remove(config, log, 'DEFAULT_Kpid_LIST');
-  }
-  // DEFAULT_bedKp/ki/kd → DEFAULT_BED_KP/KI/KD
+  // DEFAULT_bedK[pid] → DEFAULT_BED_K[PID]
   const bedKLower = ['DEFAULT_bedKp', 'DEFAULT_bedKi', 'DEFAULT_bedKd'],
         bedKUpper = ['DEFAULT_BED_KP', 'DEFAULT_BED_KI', 'DEFAULT_BED_KD'];
   for (let i = 0; i < bedKLower.length; i++) {
@@ -792,7 +769,7 @@ function _t2125_2126_pid_case(config, log, w) {
       _remove(config, log, bedKLower[i]);
     }
   }
-  // DEFAULT_chamberKp/ki/kd → DEFAULT_CHAMBER_KP/KI/KD
+  // DEFAULT_chamberK[pid] → DEFAULT_CHAMBER_K[PID]
   const chKLower = ['DEFAULT_chamberKp', 'DEFAULT_chamberKi', 'DEFAULT_chamberKd'],
         chKUpper = ['DEFAULT_CHAMBER_KP', 'DEFAULT_CHAMBER_KI', 'DEFAULT_CHAMBER_KD'];
   for (let i = 0; i < chKLower.length; i++) {
@@ -801,9 +778,32 @@ function _t2125_2126_pid_case(config, log, w) {
       _remove(config, log, chKLower[i]);
     }
   }
+
+  // Also uppercase these constant names when they appear as VALUES in other options
+  // (e.g., SOME_OPTION = "DEFAULT_Kp" → SOME_OPTION = "DEFAULT_KP")
+  const allLower = [...pidLower, ...bedKLower, ...chKLower];
+  const allUpper = [...pidUpper, ...bedKUpper, ...chKUpper];
+  for (const key of Object.keys(config)) {
+    const item = config[key];
+    if (item && typeof item.value === 'string') {
+      let newValue = item.value;
+      for (let i = 0; i < allLower.length; i++) {
+        // Replace whole-word occurrences (with word boundaries)
+        const regex = new RegExp(`\\b${allLower[i]}\\b`, 'g');
+        if (regex.test(newValue)) {
+          newValue = newValue.replace(regex, allUpper[i]);
+        }
+      }
+      if (newValue !== item.value) {
+        item.value = newValue;
+        log.push(`  ↳ ${key}.value: uppercased PID constants`);
+      }
+    }
+  }
 }
 
-// --- 2.1.2.5 → 2.1.3-b1 ---
+// --- 2.1.2.5 → 2.1.3 ---
+// 2.1.3 final (replaces beta series)
 
 function _t2125_213b1_endstop_invert(config, log, w) {
   // [AXIS]_(MIN|MAX)_ENDSTOP_INVERTING → [AXIS]_(MIN|MAX)_ENDSTOP_HIT_STATE
@@ -882,8 +882,8 @@ function _t2125_213b1_probe_pt(config, log, w) {
   }
 }
 
-// --- 2.1.3-b3 → 2.1.3-b4 ---
-// (same as 2.1.2.5 → 2.1.2.6 PID case change — already handled in _t2125_2126)
+// --- 2.1.3 final ---
+// (2.1.3-b1 through 2.1.3-b3 retired — use 2.1.3 migration step directly)
 
 // ============================================================
 // The complete migration step table
@@ -1226,13 +1226,13 @@ const migrationSteps = [
   },
 
   // ====== 2.1.2.2 → 2.1.2.3 ======
-  { from: '2.1.2.2', to: '2.1.2.3', transforms: [_t2122_2123_unknown] },
+  { from: '2.1.2.2', to: '2.1.2.3', note: 'no changes' },
 
   // ====== 2.1.2.3 → 2.1.2.4 ======
-  { from: '2.1.2.3', to: '2.1.2.4', transforms: [_t2123_2124_unknown] },
+  { from: '2.1.2.3', to: '2.1.2.4', note: 'no changes' },
 
   // ====== 2.1.2.4 → 2.1.2.5 ======
-  { from: '2.1.2.4', to: '2.1.2.5', transforms: [_t2124_2125_unknown] },
+  { from: '2.1.2.4', to: '2.1.2.5', note: 'no changes' },
 
   // ====== 2.1.2.5 → 2.1.2.6 ======
   {
@@ -1240,9 +1240,15 @@ const migrationSteps = [
     transforms: [_t2125_2126_pid_case],
   },
 
-  // ====== 2.1.2.5 → 2.1.3-b1 ======
+  // ====== 2.1.2.6 → 2.1.2.7 ======
+  { from: '2.1.2.6', to: '2.1.2.7', note: 'no changes' },
+
+  // ====== 2.1.2.7 → 2.1.2.8 ======
+  { from: '2.1.2.7', to: '2.1.2.8', note: 'no changes' },
+
+  // ====== 2.1.2.8 → 2.1.3 ======
   {
-    from: '2.1.2.5', to: '2.1.3-b1',
+    from: '2.1.2.8', to: '2.1.3',
     transforms: [_t2125_213b1_endstop_invert, _t2125_213b1_disable_axes,
                  _t2125_213b1_milliseconds_preheat, _t2125_213b1_step_pin,
                  _t2125_213b1_babystep_invert, _t2125_213b1_probe_pt],
@@ -1293,12 +1299,6 @@ const migrationSteps = [
       'DEFAULT_SHARED_VOLUME → remove SV_ prefix',
       'SDSORT_QUICK added as new safe default — enable if desired',
     ],
-  },
-
-  // ====== 2.1.3-b3 → 2.1.3-b4 ======
-  {
-    from: '2.1.3-b3', to: '2.1.3-b4',
-    transforms: [_t2125_2126_pid_case],
   },
 
   // ====== 2.1.3 → 2.2.0 ======
@@ -1421,7 +1421,8 @@ function nearestConfigVersion(hexVer) {
     '1.1.9', '2.0.0', '2.0.1', '2.0.2', '2.0.3', '2.0.4',
     '2.0.5', '2.0.6', '2.0.7', '2.0.8', '2.0.8.1',
     '2.0.9', '2.0.9.1', '2.0.9.2', '2.0.9.3', '2.0.9.4', '2.0.9.5',
-    '2.1.0', '2.1.1', '2.1.2', '2.1.2.1'
+    '2.1.0', '2.1.1', '2.1.2', '2.1.2.1', '2.1.2.2', '2.1.2.3',
+    '2.1.2.4', '2.1.2.5', '2.1.2.6', '2.1.2.7', '2.1.2.8', '2.1.3'
   ];
 
   if (!hexVer) return null;
