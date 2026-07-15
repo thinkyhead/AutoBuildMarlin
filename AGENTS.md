@@ -35,7 +35,8 @@ AutoBuildMarlin/           # VSCode Extension root
 │   │   ├── index.js              # VSCode integration test entry point
 │   │   ├── migration.test.js     # Migration integration tests (requires VSCode API)
 │   │   ├── migration-rules.test.js   # Migration rules unit tests (standalone)
-│   │   └── migration-pipeline.test.js # Full pipeline tests with embedded configs
+│   │   ├── migration-pipeline.test.js # Full pipeline tests with embedded configs
+│   │   └── lcd-completeness.test.js   # Schema LCD array completeness (vs Conditionals-2-LCD.h sanity check)
 │   └── fixtures/
 │       └── marlin-workspace/ # Test workspace with sample Marlin configs
 ```
